@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 
 #[account]
+#[derive(InitSpace)]
 pub struct Pool {
     pub token_0: Pubkey,
     pub token_1: Pubkey,
