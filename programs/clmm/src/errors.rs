@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 #[error_code]
-pub enum ClmmError{
-#[msg("Arithmetic Overflow")]
-ArithmeticOverflow
+pub enum ClmmError {
+    #[msg("Arithmetic Overflow")]
+    ArithmeticOverflow,
 }
