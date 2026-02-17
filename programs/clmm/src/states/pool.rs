@@ -1,5 +1,5 @@
-use anchor_lang::prelude::*;
 use crate::utils::ANCHOR_DISCRIMINATOR;
+use anchor_lang::prelude::*;
 
 #[account]
 #[derive(InitSpace)]
