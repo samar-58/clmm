@@ -78,22 +78,22 @@ impl TickArrayState {
 
         start_tick
     }
-// this function finds the tick state of the given tick from the aray and returns it mutably
-pub fn get_tick_state_mut(&mut self, tick: i32, tick_spacing: i32)
-->Result<&mut TickState>{
-    let ticks_per_array = TICKS_PER_ARRAY as i32;
+    // this function finds the tick state of the given tick from the aray and returns it mutably
+    pub fn get_tick_state_mut(&mut self, tick: i32, tick_spacing: i32) -> Result<&mut TickState> {
+        let ticks_per_array = TICKS_PER_ARRAY as i32;
 
-    let offset = (tick
-    .checked_div(tick_spacing) // position of the tick in the sequence
-    .ok_or(ClmmError::ArithmeticOverflow)?)
-    .checked_sub(self.starting_tick 
-    .checked_div(tick_spacing)// distance from the first idx
-    .ok_or(ClmmError::ArithmeticOverflow)?,)
-    .ok_or(ClmmError::ArithmeticOverflow)?
-    .checked_rem(ticks_per_array) // to make sure offset stays in the range
-    .ok_or(ClmmError::ArithmeticOverflow)? as usize;
+        let offset = (tick
+            .checked_div(tick_spacing) // position of the tick in the sequence
+            .ok_or(ClmmError::ArithmeticOverflow)?)
+        .checked_sub(
+            self.starting_tick
+                .checked_div(tick_spacing) // distance from the first idx
+                .ok_or(ClmmError::ArithmeticOverflow)?,
+        )
+        .ok_or(ClmmError::ArithmeticOverflow)?
+        .checked_rem(ticks_per_array) // to make sure offset stays in the range
+        .ok_or(ClmmError::ArithmeticOverflow)? as usize;
 
-Ok(&mut self.ticks[offset])
-
-}
+        Ok(&mut self.ticks[offset])
+    }
 }

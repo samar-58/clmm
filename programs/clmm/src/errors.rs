@@ -4,4 +4,8 @@ use anchor_lang::prelude::*;
 pub enum ClmmError {
     #[msg("Arithmetic Overflow")]
     ArithmeticOverflow,
+    #[msg("Invalid Token Pair")]
+    InvalidTokenPair,
+    #[msg("Invalid Token Pair")]
+    InvalidTickSpacing,
 }
