@@ -1,0 +1,281 @@
+use crate::errors::ClmmError;
+use anchor_lang::prelude::*;
+
+const Q96: u128 = 1 << 96;
+const Q64: u128 = 1 << 64;
+pub const TICK_SPACING: i32 = 10;
+
+pub const MIN_TICK: i32 = -443636;
+pub const MAX_TICK: i32 = -MIN_TICK;
+
+pub const MIN_SQRT_PRICE_X64: u128 = 4295048016;
+pub const MAX_SQRT_PRICE_X64: u128 = 79226673521066979257578248091;
+
+pub const MIN_SQRT_PRICE_X96: u128 = MIN_SQRT_PRICE_X64 << 32;
+pub const MAX_SQRT_PRICE_X96: u128 = MAX_SQRT_PRICE_X64 << 32;
+
+
+const BIT_PRECISION: u32 = 16;
+
+pub fn integer_sqrt(value: u128) -> u64 {
+    if value == 0 {
+        return 0;
+    }
+    let mut x = value;
+    let mut y = (value + 1) / 2;
+
+    while y < x {
+        x = y;
+        y = (x + value / x) / 2;
+    }
+    x as u64
+}
+
+pub fn price_to_sqrt_price_x96(price: u64) -> Result<u128> {
+    if price == 0 {
+        return Err(ClmmError::ZeroAmount.into());
+    }
+
+    let price_scaled = price as u128;
+
+    let mut x = price_scaled;
+    let mut y = (price_scaled + 1) / 2;
+
+    while y < x {
+        x = y;
+        y = (x + price_scaled / x) / 2;
+    }
+
+    let sqrt_price_x96 = x
+        .checked_mul(Q96)
+        .ok_or(ClmmError::ArithmeticOverflow)?;
+
+    Ok(sqrt_price_x96)
+}
+
+pub fn tick_to_sqrt_price_x96(tick: i32) -> Result<u128> {
+    let abs_tick = tick.abs() as u32;
+    require!(
+        abs_tick <= MAX_TICK as u32,
+        ClmmError::TickUpperOverflow
+    );
+
+    let mut ratio: u128 = if abs_tick & 0x1 != 0 {
+        18445821805675392311u128
+    } else {
+        1u128 << 64
+    };
+
+    if abs_tick & 0x2 != 0 {
+        ratio = (ratio * 18444899583751176498u128) >> 64;
+    }
+    if abs_tick & 0x4 != 0 {
+        ratio = (ratio * 18443055278223354162u128) >> 64;
+    }
+    if abs_tick & 0x8 != 0 {
+        ratio = (ratio * 18439367220385604838u128) >> 64;
+    }
+    if abs_tick & 0x10 != 0 {
+        ratio = (ratio * 18431993317065449817u128) >> 64;
+    }
+    if abs_tick & 0x20 != 0 {
+        ratio = (ratio * 18417254355718160513u128) >> 64;
+    }
+    if abs_tick & 0x40 != 0 {
+        ratio = (ratio * 18387811781193591352u128) >> 64;
+    }
+    if abs_tick & 0x80 != 0 {
+        ratio = (ratio * 18329067761203520168u128) >> 64;
+    }
+    if abs_tick & 0x100 != 0 {
+        ratio = (ratio * 18212142134806087854u128) >> 64;
+    }
+    if abs_tick & 0x200 != 0 {
+        ratio = (ratio * 17980523815641551639u128) >> 64;
+    }
+    if abs_tick & 0x400 != 0 {
+        ratio = (ratio * 17526086738831147013u128) >> 64;
+    }
+    if abs_tick & 0x800 != 0 {
+        ratio = (ratio * 16651378430235024244u128) >> 64;
+    }
+    if abs_tick & 0x1000 != 0 {
+        ratio = (ratio * 15030750278693429944u128) >> 64;
+    }
+    if abs_tick & 0x2000 != 0 {
+        ratio = (ratio * 12247334978882834399u128) >> 64;
+    }
+    if abs_tick & 0x4000 != 0 {
+        ratio = (ratio * 8131365268884726200u128) >> 64;
+    }
+    if abs_tick & 0x8000 != 0 {
+        ratio = (ratio * 3584323654723342297u128) >> 64;
+    }
+    if abs_tick & 0x10000 != 0 {
+        ratio = (ratio * 696457651847595233u128) >> 64;
+    }
+    if abs_tick & 0x20000 != 0 {
+        ratio = (ratio * 26294789957452057u128) >> 64;
+    }
+    if abs_tick & 0x40000 != 0 {
+        ratio = (ratio * 37481735321082u128) >> 64;
+    }
+
+    if tick > 0 {
+        ratio = u128::MAX / ratio;
+    }
+
+    Ok(ratio << 32)
+}
+
+pub fn sqrt_price_x96_to_tick(sqrt_price_x96: u128) -> Result<i32> {
+    require!(
+        sqrt_price_x96 >= MIN_SQRT_PRICE_X96 && sqrt_price_x96 < MAX_SQRT_PRICE_X96,
+        ClmmError::SqrtPriceX96
+    );
+
+    let sqrt_price_x64 = sqrt_price_x96 >> 32;
+
+    let msb: u32 = 128 - sqrt_price_x64.leading_zeros() - 1;
+    let log2p_integer_x64: i128 = ((msb as i128) - 64) << 64;
+
+    let mut r: u128 = if msb >= 64 {
+        sqrt_price_x64 >> (msb - 63)
+    } else {
+        sqrt_price_x64 << (63 - msb)
+    };
+
+    let mut log2p_fraction_x64: i128 = 0;
+    let mut bit: i128 = 1i128 << 63;
+
+    for _ in 0..BIT_PRECISION {
+        r = (r * r) >> 63;
+        let is_r_more_than_two = (r >> 64) as u32;
+        r >>= is_r_more_than_two;
+        log2p_fraction_x64 |= bit * is_r_more_than_two as i128;
+        bit >>= 1;
+    }
+
+    let log2p_x64 = log2p_integer_x64 + log2p_fraction_x64;
+
+
+    let log_base: i128 = 1330580271462080i128;
+    let tick_approx = (log2p_x64 / log_base) as i32;
+
+    let tick_low = tick_approx - 1;
+    let tick_high = tick_approx + 1;
+
+    Ok(if let Ok(price_high) = tick_to_sqrt_price_x96(tick_high) {
+        if price_high <= sqrt_price_x96 {
+            tick_high
+        } else if let Ok(price_approx) = tick_to_sqrt_price_x96(tick_approx) {
+            if price_approx <= sqrt_price_x96 {
+                tick_approx
+            } else {
+                tick_low
+            }
+        } else {
+            tick_low
+        }
+    } else {
+        tick_approx
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_price_to_sqrt_price_x96_perfect_square() {
+        let price = 4;
+        let result = price_to_sqrt_price_x96(price).unwrap();
+        let expected = 2u128 * Q96;
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_price_to_sqrt_price_x96_non_perfect_square() {
+        let price = 10;
+        let result = price_to_sqrt_price_x96(price).unwrap();
+        let expected = 3u128 * Q96;
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_price_to_sqrt_price_x96_zero_price() {
+        let price = 0;
+        let result = price_to_sqrt_price_x96(price);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), ClmmError::ZeroAmount.into());
+    }
+
+    #[test]
+    fn test_price_to_sqrt_price_x96_large_price() {
+        let price = 1_000_000;
+        let result = price_to_sqrt_price_x96(price).unwrap();
+        let expected = 1000u128 * Q96;
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_tick_to_sqrt_price_at_tick_zero() {
+        let tick = 0;
+        let result = tick_to_sqrt_price_x96(tick).unwrap();
+        let expected = 1u128 << 96;
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_tick_to_sqrt_price_positive_tick() {
+        let tick = 100;
+        let result = tick_to_sqrt_price_x96(tick).unwrap();
+        let base = 1u128 << 96;
+        assert!(result > base);
+    }
+
+    #[test]
+    fn test_tick_to_sqrt_price_negative_tick() {
+        let tick = -100;
+        let result = tick_to_sqrt_price_x96(tick).unwrap();
+        let base = 1u128 << 96;
+        assert!(result < base);
+    }
+
+    #[test]
+    fn test_sqrt_price_to_tick_at_price_one() {
+        let sqrt_price = 1u128 << 96;
+        let result = sqrt_price_x96_to_tick(sqrt_price).unwrap();
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_roundtrip_tick_to_price_to_tick() {
+        let original_tick = 1000;
+        let sqrt_price = tick_to_sqrt_price_x96(original_tick).unwrap();
+        let recovered_tick = sqrt_price_x96_to_tick(sqrt_price).unwrap();
+        assert!((recovered_tick - original_tick).abs() <= 1);
+    }
+
+    #[test]
+    fn test_roundtrip_negative_tick() {
+        let original_tick = -5000;
+        let sqrt_price = tick_to_sqrt_price_x96(original_tick).unwrap();
+        let recovered_tick = sqrt_price_x96_to_tick(sqrt_price).unwrap();
+        assert!((recovered_tick - original_tick).abs() <= 1);
+    }
+
+    #[test]
+    fn test_tick_overflow() {
+        let tick = MAX_TICK + 1;
+        let result = tick_to_sqrt_price_x96(tick);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sqrt_price_below_min() {
+        let sqrt_price = MIN_SQRT_PRICE_X96 - 1;
+        let result = sqrt_price_x96_to_tick(sqrt_price);
+        assert!(result.is_err());
+    }
+}

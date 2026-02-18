@@ -8,4 +8,12 @@ pub enum ClmmError {
     InvalidTokenPair,
     #[msg("Invalid Token Pair")]
     InvalidTickSpacing,
+    #[msg("Invalid Token Order")]
+    InvalidTokenOrder,
+    #[msg("Amount entered is 0")]
+    ZeroAmount,
+    #[msg("Tick upper over flow")]
+    TickUpperOverflow,
+    #[msg("Error while sqrt price")]
+    SqrtPriceX96
 }
