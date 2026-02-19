@@ -1,10 +1,10 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, TokenInterface};
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::states::{Pool, Position, TickArrayState};
 
 #[derive(Accounts)]
-#[instruction(upper_tick: i32, lower_tick: i32, owner: Pubkey, tick_array_lower_start_index:i32, tick_array_upper_start_index:i32)]
+#[instruction(upper_tick: i32, lower_tick: i32, tick_array_lower_start_index:i32, tick_array_upper_start_index:i32)]
 pub struct OpenPosition<'info>{
 #[account(mut)]
 pub signer: Signer<'info>,
@@ -44,12 +44,13 @@ pub lower_tick_array: Account<'info, TickArrayState>,
 pub upper_tick_array: Account<'info, TickArrayState>,
 
 #[account(
-    init_if_needed,
+    init,
     payer = signer,
     space = Position::SPACE,
     seeds = [
         b"position",
-        owner.key().as_ref(),
+        pool.key().as_ref(),
+        signer.key().as_ref(),
         lower_tick.to_le_bytes().as_ref(),
         upper_tick.to_le_bytes().as_ref()
     ],
@@ -57,13 +58,29 @@ pub upper_tick_array: Account<'info, TickArrayState>,
 )]
 pub position: Account<'info, Position>,
 
-pub user_0: InterfaceAccount<'info, Mint>,
-pub user_1: InterfaceAccount<'info, Mint>,
+pub user_0: InterfaceAccount<'info, TokenAccount>,
+pub user_1: InterfaceAccount<'info, TokenAccount>,
 
-pub pool_0: InterfaceAccount<'info, Mint>,
-pub pool_1: InterfaceAccount<'info, Mint>,
+#[account(
+    mut,
+    token::mint = token_0,
+    token::authority = pool
+)]
+pub pool_vault_0: InterfaceAccount<'info, TokenAccount>,
+#[account(
+    mut,
+    token::mint = token_1,
+    token::authority = pool
+)]
+pub pool_vault_1: InterfaceAccount<'info, TokenAccount>,
 
 pub system_program: Program<'info, System>,
 pub token_program: Interface<'info, TokenInterface>,
 pub rent: Sysvar<'info, Rent>
+}
+
+pub fn open_position(ctx: Context<OpenPosition>, upper_tick: i32, lower_tick: i32, owner: Pubkey, tick_array_lower_start_index:i32, tick_array_upper_start_index:i32)
+->Result<()>{
+
+Ok(())
 }
