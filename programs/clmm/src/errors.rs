@@ -26,5 +26,6 @@ pub enum ClmmError {
     InvalidTickRange,
     #[msg("Invalid Ticks Provided")]
     InvalidTicks,
-
+    #[msg("Invalid Amount Entered")]
+    InvalidAmount,
 }
