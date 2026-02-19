@@ -16,4 +16,15 @@ pub enum ClmmError {
     TickUpperOverflow,
     #[msg("Error while sqrt price")]
     SqrtPriceX96,
+    #[msg("Invalid Position Range")]
+    InvalidPositionRange,
+    #[msg("Invalid Position Owner")]
+    InvalidPositionOwner,
+    #[msg("Invalid Mint Range")]
+    InvalidMintRange,
+    #[msg("Invalid Tick Range")]
+    InvalidTickRange,
+    #[msg("Invalid Ticks Provided")]
+    InvalidTicks,
+
 }

@@ -3,7 +3,7 @@ use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::{
     errors::ClmmError,
-    instructions::{transfer_from_pda},
+    instructions::transfer_from_pda,
     states::{Pool, Position, TickArrayState},
     utils::*,
 };
@@ -91,7 +91,10 @@ pub fn close_position(
 
     let position_lower_tick = position.lower_tick;
     let position_upper_tick = position.upper_tick;
-    require!(upper_tick == position_upper_tick && lower_tick == position_lower_tick, ClmmError::ZeroAmount);
+    require!(
+        upper_tick == position_upper_tick && lower_tick == position_lower_tick,
+        ClmmError::ZeroAmount
+    );
     let upper_tick_array = &mut ctx.accounts.upper_tick_array;
     let lower_tick_array = &mut ctx.accounts.lower_tick_array;
 
