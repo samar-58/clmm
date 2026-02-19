@@ -51,7 +51,6 @@ pub fn init_pool(
     tick_spacing: i32,
     initialize_sqrt_price: u128,
 ) -> Result<()> {
-
     require!(
         ctx.accounts.token_0_mint.key() < ctx.accounts.token_1_mint.key(),
         ClmmError::InvalidTokenOrder
@@ -69,7 +68,7 @@ pub fn init_pool(
         token_vault_1: ctx.accounts.token_1_vault.key(),
         global_liquidity: 0,
         sqrt_price_x96: initialize_sqrt_price,
-        current_tick:sqrt_price_x96_to_tick(initialize_sqrt_price) ?,
+        current_tick: sqrt_price_x96_to_tick(initialize_sqrt_price)?,
         tick_spacing,
         bump: ctx.bumps.pool,
     });

@@ -1,8 +1,8 @@
 use crate::errors::ClmmError;
-use anchor_lang::prelude::*;
+use anchor_lang::prelude::{borsh::de, *};
 
 const Q96: u128 = 1 << 96;
-const Q64: u128 = 1 << 64;
+
 pub const TICK_SPACING: i32 = 10;
 
 pub const MIN_TICK: i32 = -443636;
@@ -13,7 +13,6 @@ pub const MAX_SQRT_PRICE_X64: u128 = 79226673521066979257578248091;
 
 pub const MIN_SQRT_PRICE_X96: u128 = MIN_SQRT_PRICE_X64 << 32;
 pub const MAX_SQRT_PRICE_X96: u128 = MAX_SQRT_PRICE_X64 << 32;
-
 
 const BIT_PRECISION: u32 = 16;
 
@@ -46,19 +45,14 @@ pub fn price_to_sqrt_price_x96(price: u64) -> Result<u128> {
         y = (x + price_scaled / x) / 2;
     }
 
-    let sqrt_price_x96 = x
-        .checked_mul(Q96)
-        .ok_or(ClmmError::ArithmeticOverflow)?;
+    let sqrt_price_x96 = x.checked_mul(Q96).ok_or(ClmmError::ArithmeticOverflow)?;
 
     Ok(sqrt_price_x96)
 }
 
 pub fn tick_to_sqrt_price_x96(tick: i32) -> Result<u128> {
     let abs_tick = tick.abs() as u32;
-    require!(
-        abs_tick <= MAX_TICK as u32,
-        ClmmError::TickUpperOverflow
-    );
+    require!(abs_tick <= MAX_TICK as u32, ClmmError::TickUpperOverflow);
 
     let mut ratio: u128 = if abs_tick & 0x1 != 0 {
         18445821805675392311u128
@@ -158,7 +152,6 @@ pub fn sqrt_price_x96_to_tick(sqrt_price_x96: u128) -> Result<i32> {
 
     let log2p_x64 = log2p_integer_x64 + log2p_fraction_x64;
 
-
     let log_base: i128 = 1330580271462080i128;
     let tick_approx = (log2p_x64 / log_base) as i32;
 
@@ -180,6 +173,85 @@ pub fn sqrt_price_x96_to_tick(sqrt_price_x96: u128) -> Result<i32> {
     } else {
         tick_approx
     })
+}
+
+pub fn get_amounts_for_liquidity(
+    sqrt_price_x96_current: u128,
+    sqrt_price_x96_lower: u128,
+    sqrt_price_x96_upper: u128,
+    liquidity: u128,
+) -> Result<(u64, u64)> {
+    let amount_a: u64;
+    let amount_b: u64;
+
+    if sqrt_price_x96_current <= sqrt_price_x96_lower {
+        // token A only : L * (sqrt_upper - sqrt_lower) * Q96 /sqrt_upper * sqrt_lower
+        let numerator = liquidity
+            .checked_mul(
+                sqrt_price_x96_upper
+                    .checked_sub(sqrt_price_x96_lower)
+                    .ok_or(ClmmError::ArithmeticOverflow)?,
+            )
+            .ok_or(ClmmError::ArithmeticOverflow)?
+            .checked_mul(Q96)
+            .ok_or(ClmmError::ArithmeticOverflow)?;
+
+        let denominator = sqrt_price_x96_upper
+            .checked_mul(sqrt_price_x96_lower)
+            .ok_or(ClmmError::ArithmeticOverflow)?;
+
+        amount_a = (numerator / denominator)
+            .try_into()
+            .map_err(|_| ClmmError::ArithmeticOverflow)?;
+        amount_b = 0;
+    } else if sqrt_price_x96_current >= sqrt_price_x96_upper {
+        // token B only : L * (sqrt_upper - sqrt_lower) / Q96
+        amount_a = 0;
+        amount_b = (liquidity
+            .checked_mul(
+                sqrt_price_x96_upper
+                    .checked_sub(sqrt_price_x96_lower)
+                    .ok_or(ClmmError::ArithmeticOverflow)?,
+            )
+            .ok_or(ClmmError::ArithmeticOverflow)?
+            .checked_div(Q96)
+            .ok_or(ClmmError::ArithmeticOverflow)?)
+        .try_into()
+        .map_err(|_| ClmmError::ArithmeticOverflow)?;
+    } else {
+        //both tokens
+        // token A : L * (sqrt_upper - sqrt_current) * Q96 /sqrt_upper * sqrt_current
+        let numerator = liquidity
+            .checked_mul(
+                sqrt_price_x96_upper
+                    .checked_sub(sqrt_price_x96_current)
+                    .ok_or(ClmmError::ArithmeticOverflow)?,
+            )
+            .ok_or(ClmmError::ArithmeticOverflow)?
+            .checked_mul(Q96)
+            .ok_or(ClmmError::ArithmeticOverflow)?;
+
+        let denominator = sqrt_price_x96_upper
+            .checked_mul(sqrt_price_x96_current)
+            .ok_or(ClmmError::ArithmeticOverflow)?;
+
+        amount_a = (numerator / denominator)
+            .try_into()
+            .map_err(|_| ClmmError::ArithmeticOverflow)?;
+        // amount_b = L * (current - lower) / Q64
+        amount_b = (liquidity
+            .checked_mul(
+                sqrt_price_x96_current
+                    .checked_sub(sqrt_price_x96_lower)
+                    .ok_or(ClmmError::ArithmeticOverflow)?,
+            )
+            .ok_or(ClmmError::ArithmeticOverflow)?
+            .checked_div(Q96)
+            .ok_or(ClmmError::ArithmeticOverflow)?)
+        .try_into()
+        .map_err(|_| ClmmError::ArithmeticOverflow)?;
+    }
+    Ok((amount_a, amount_b))
 }
 
 #[cfg(test)]

@@ -15,5 +15,5 @@ pub enum ClmmError {
     #[msg("Tick upper over flow")]
     TickUpperOverflow,
     #[msg("Error while sqrt price")]
-    SqrtPriceX96
+    SqrtPriceX96,
 }
