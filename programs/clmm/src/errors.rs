@@ -28,4 +28,6 @@ pub enum ClmmError {
     InvalidTicks,
     #[msg("Invalid Amount Entered")]
     InvalidAmount,
+    #[msg("Invalid tick array account")]
+    InvalidTickArrayAccount
 }
