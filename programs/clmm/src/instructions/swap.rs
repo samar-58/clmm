@@ -34,16 +34,14 @@ pub struct Swap<'info> {
     pub tick_array: Box<Account<'info, TickArrayState>>,
 
     #[account(
-        init_if_needed,
-        payer = signer,
+        mut,
         token::mint = token_0,
         token::authority = signer
     )]
     pub user_0: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
-        init_if_needed,
-        payer = signer,
+        mut,
         token::mint = token_1,
         token::authority = signer
     )]
