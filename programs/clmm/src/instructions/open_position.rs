@@ -18,10 +18,10 @@ pub struct OpenPosition<'info> {
     has_one = token_0,
     has_one = token_1
 )]
-    pub pool: Account<'info, Pool>,
+    pub pool: Box<Account<'info, Pool>>,
 
-    pub token_0: InterfaceAccount<'info, Mint>,
-    pub token_1: InterfaceAccount<'info, Mint>,
+    pub token_0: Box<InterfaceAccount<'info, Mint>>,
+    pub token_1: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
     init_if_needed,
@@ -34,7 +34,7 @@ pub struct OpenPosition<'info> {
     ],
     bump
 )]
-    pub lower_tick_array: Account<'info, TickArrayState>,
+    pub lower_tick_array: Box<Account<'info, TickArrayState>>,
     #[account(
     init_if_needed,
     payer = signer,
@@ -46,7 +46,7 @@ pub struct OpenPosition<'info> {
     ],
     bump
 )]
-    pub upper_tick_array: Account<'info, TickArrayState>,
+    pub upper_tick_array: Box<Account<'info, TickArrayState>>,
 
     #[account(
     init,
@@ -61,24 +61,24 @@ pub struct OpenPosition<'info> {
     ],
     bump
 )]
-    pub position: Account<'info, Position>,
+    pub position: Box<Account<'info, Position>>,
     #[account(mut)]
-    pub user_0: InterfaceAccount<'info, TokenAccount>,
+    pub user_0: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut)]
-    pub user_1: InterfaceAccount<'info, TokenAccount>,
+    pub user_1: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
     mut,
     token::mint = token_0,
     token::authority = pool
 )]
-    pub pool_vault_0: InterfaceAccount<'info, TokenAccount>,
+    pub pool_vault_0: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
     mut,
     token::mint = token_1,
     token::authority = pool
 )]
-    pub pool_vault_1: InterfaceAccount<'info, TokenAccount>,
+    pub pool_vault_1: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub system_program: Program<'info, System>,
     pub token_program: Interface<'info, TokenInterface>,

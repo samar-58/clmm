@@ -18,7 +18,7 @@ pub struct Swap<'info> {
         has_one = token_0,
         has_one = token_1
     )]
-    pub pool: Account<'info, Pool>,
+    pub pool: Box<Account<'info, Pool>>,
 
     #[account(
         mut,
@@ -31,7 +31,7 @@ pub struct Swap<'info> {
             &crate::ID
         ).0 @ ClmmError::InvalidTickArrayAccount
     )]
-    pub tick_array: Account<'info, TickArrayState>,
+    pub tick_array: Box<Account<'info, TickArrayState>>,
 
     #[account(
         init_if_needed,
@@ -39,7 +39,7 @@ pub struct Swap<'info> {
         token::mint = token_0,
         token::authority = signer
     )]
-    pub user_0: InterfaceAccount<'info, TokenAccount>,
+    pub user_0: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         init_if_needed,
@@ -47,24 +47,24 @@ pub struct Swap<'info> {
         token::mint = token_1,
         token::authority = signer
     )]
-    pub user_1: InterfaceAccount<'info, TokenAccount>,
+    pub user_1: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         token::mint = token_0,
         token::authority = pool
     )]
-    pub token_vault_0: InterfaceAccount<'info, TokenAccount>,
+    pub token_vault_0: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         token::mint = token_1,
         token::authority = pool
     )]
-    pub token_vault_1: InterfaceAccount<'info, TokenAccount>,
+    pub token_vault_1: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    pub token_0: InterfaceAccount<'info, Mint>,
-    pub token_1: InterfaceAccount<'info, Mint>,
+    pub token_0: Box<InterfaceAccount<'info, Mint>>,
+    pub token_1: Box<InterfaceAccount<'info, Mint>>,
 
     pub system_program: Program<'info, System>,
     pub token_program: Interface<'info, TokenInterface>,
