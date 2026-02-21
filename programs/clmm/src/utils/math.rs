@@ -1,5 +1,5 @@
 use crate::errors::ClmmError;
-use anchor_lang::prelude::{borsh::de, *};
+use anchor_lang::prelude::*;
 
 const Q96: u128 = 1 << 96;
 
@@ -253,6 +253,149 @@ pub fn get_amounts_for_liquidity(
     }
     Ok((amount_a, amount_b))
 }
+pub fn compute_swap_step(
+    sqrt_price_current_x96: u128,
+    sqrt_price_target_x96: u128,
+    liquidity: u128,
+    amount_remaining: u128,
+    a_to_b: bool,
+) -> Result<(u128, u128, u128)> {
+    require!(liquidity > 0, ClmmError::InsufficientLiquidity);
+
+    if a_to_b {
+
+        // a_to_b (selling token_a, price goes DOWN)
+        // formula:
+        //   required_in = L * (1/√P_target - 1/√P_current)
+        //
+        // in Q96 fixed-point, 1/√P = Q96 / √P_x96, so:
+        //   required_in = L * Q96 / √P_target - L * Q96 / √P_current
+        //
+        // we compute each term separately to avoid overflow.
+
+        let l_q96_div_target = liquidity
+            .checked_mul(Q96)
+            .ok_or(ClmmError::ArithmeticOverflow)?
+            .checked_div(sqrt_price_target_x96)
+            .ok_or(ClmmError::ArithmeticOverflow)?;
+
+        let l_q96_div_current = liquidity
+            .checked_mul(Q96)
+            .ok_or(ClmmError::ArithmeticOverflow)?
+            .checked_div(sqrt_price_current_x96)
+            .ok_or(ClmmError::ArithmeticOverflow)?;
+
+        let required_in = l_q96_div_target
+            .checked_sub(l_q96_div_current)
+            .ok_or(ClmmError::ArithmeticOverflow)?;
+
+        // can we reach the target tick, or do we stop partway?
+        let (next_sqrt_price_x96, amount_in) = if amount_remaining >= required_in {
+            // we have enough input to fully cross to the target tick
+            (sqrt_price_target_x96, required_in)
+        } else {
+            // not enough input — price stops between current and target
+            //
+            // formula:
+            //   1/√P_new = 1/√P_current + amount_in / (L * Q96)
+            //   √P_new = L * Q96 / (L * Q96 / √P_current + amount_in)
+            //
+            // we already computed L*Q96/√P_current above, so reuse it.
+
+            let denom = l_q96_div_current
+                .checked_add(amount_remaining)
+                .ok_or(ClmmError::ArithmeticOverflow)?;
+
+            let next_price = liquidity
+                .checked_mul(Q96)
+                .ok_or(ClmmError::ArithmeticOverflow)?
+                .checked_div(denom)
+                .ok_or(ClmmError::ArithmeticOverflow)?;
+
+            (next_price, amount_remaining)
+        };
+
+        //  how much token_b the user receives
+        //   amount_out = L * (√P_current - √P_next) / Q96
+        //
+        // this is safe because (√P_current - √P_next) < Q96 and L is small
+        let out_diff = sqrt_price_current_x96
+            .checked_sub(next_sqrt_price_x96)
+            .ok_or(ClmmError::ArithmeticOverflow)?;
+
+        let amount_out = liquidity
+            .checked_mul(out_diff)
+            .ok_or(ClmmError::ArithmeticOverflow)?
+            .checked_div(Q96)
+            .ok_or(ClmmError::ArithmeticOverflow)?;
+
+        Ok((next_sqrt_price_x96, amount_in, amount_out))
+    } else {
+        // CASE: b_to_a (selling token_b, price goes UP)
+        //
+        // formula:
+        //   required_in = L * (√P_target - √P_current) / Q96
+        //
+        // this is safe: L * price_diff can overflow, but we divide by Q96
+        // immediately, so we split it: (L * price_diff) / Q96
+
+        let price_diff = sqrt_price_target_x96
+            .checked_sub(sqrt_price_current_x96)
+            .ok_or(ClmmError::ArithmeticOverflow)?;
+
+        let required_in = liquidity
+            .checked_mul(price_diff)
+            .ok_or(ClmmError::ArithmeticOverflow)?
+            .checked_div(Q96)
+            .ok_or(ClmmError::ArithmeticOverflow)?;
+
+        // full cross or partial step?
+        let (next_sqrt_price_x96, amount_in) = if amount_remaining >= required_in {
+            // enough input to reach the target tick
+            (sqrt_price_target_x96, required_in)
+        } else {
+            // partial step — price stops between current and target
+            //
+            //   next_price = √P_current + (amount_in * Q96 / L)
+
+            let price_delta = amount_remaining
+                .checked_mul(Q96)
+                .ok_or(ClmmError::ArithmeticOverflow)?
+                .checked_div(liquidity)
+                .ok_or(ClmmError::ArithmeticOverflow)?;
+
+            let next_price = sqrt_price_current_x96
+                .checked_add(price_delta)
+                .ok_or(ClmmError::ArithmeticOverflow)?;
+
+            (next_price, amount_remaining)
+        };
+
+        // calculate output: how much token_a the user receives
+        //   amount_out = L * (1/√P_current - 1/√P_next)
+        //             = L * Q96 / √P_current - L * Q96 / √P_next
+        //
+        // same divide-first trick as the a_to_b required_in calculation.
+
+        let l_q96_div_current = liquidity
+            .checked_mul(Q96)
+            .ok_or(ClmmError::ArithmeticOverflow)?
+            .checked_div(sqrt_price_current_x96)
+            .ok_or(ClmmError::ArithmeticOverflow)?;
+
+        let l_q96_div_next = liquidity
+            .checked_mul(Q96)
+            .ok_or(ClmmError::ArithmeticOverflow)?
+            .checked_div(next_sqrt_price_x96)
+            .ok_or(ClmmError::ArithmeticOverflow)?;
+
+        let amount_out = l_q96_div_current
+            .checked_sub(l_q96_div_next)
+            .ok_or(ClmmError::ArithmeticOverflow)?;
+
+        Ok((next_sqrt_price_x96, amount_in, amount_out))
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -348,6 +491,83 @@ mod tests {
     fn test_sqrt_price_below_min() {
         let sqrt_price = MIN_SQRT_PRICE_X96 - 1;
         let result = sqrt_price_x96_to_tick(sqrt_price);
+        assert!(result.is_err());
+    }
+
+    // compute_swap_step tests
+
+    #[test]
+    fn test_swap_a_to_b_full_cross() {
+        // price at tick 0 (1.0), target at tick -10 (slightly lower price)
+        // using a small tick distance to keep numbers manageable
+        let sqrt_current = tick_to_sqrt_price_x96(0).unwrap();
+        let sqrt_target = tick_to_sqrt_price_x96(-10).unwrap();
+
+        let liquidity: u128 = 1_000_000_000;
+
+        // large enough amount to fully cross to the target
+        let amount_remaining: u128 = 1_000_000_000;
+
+        let (next_price, amount_in, amount_out) =
+            compute_swap_step(sqrt_current, sqrt_target, liquidity, amount_remaining, true)
+                .unwrap();
+
+        // price should land exactly at target since we had more than enough input
+        assert_eq!(next_price, sqrt_target);
+        // should have consumed some input and produced some output
+        assert!(amount_in > 0);
+        assert!(amount_out > 0);
+        // amount_in should be less than what we provided (we had more than enough)
+        assert!(amount_in <= amount_remaining);
+    }
+
+    #[test]
+    fn test_swap_a_to_b_partial() {
+        // price at tick 0, target at tick -100
+        let sqrt_current = tick_to_sqrt_price_x96(0).unwrap();
+        let sqrt_target = tick_to_sqrt_price_x96(-100).unwrap();
+        let liquidity: u128 = 1_000_000_000;
+
+        // tiny amount should not reach the target
+        let amount_remaining: u128 = 1;
+
+        let (next_price, amount_in, _amount_out) =
+            compute_swap_step(sqrt_current, sqrt_target, liquidity, amount_remaining, true)
+                .unwrap();
+
+        // price should be between current and target
+        assert!(next_price < sqrt_current);
+        assert!(next_price > sqrt_target);
+        // all input consumed in partial step
+        assert_eq!(amount_in, amount_remaining);
+    }
+
+    #[test]
+    fn test_swap_b_to_a_full_cross() {
+        // price at tick 0, target at tick 10 (slightly higher price)
+        let sqrt_current = tick_to_sqrt_price_x96(0).unwrap();
+        let sqrt_target = tick_to_sqrt_price_x96(10).unwrap();
+        let liquidity: u128 = 1_000_000_000;
+
+        // large enough to fully cross
+        let amount_remaining: u128 = 1_000_000_000;
+
+        let (next_price, amount_in, amount_out) =
+            compute_swap_step(sqrt_current, sqrt_target, liquidity, amount_remaining, false)
+                .unwrap();
+
+        assert_eq!(next_price, sqrt_target);
+        assert!(amount_in > 0);
+        assert!(amount_out > 0);
+        assert!(amount_in <= amount_remaining);
+    }
+
+    #[test]
+    fn test_swap_zero_liquidity_fails() {
+        let sqrt_current = tick_to_sqrt_price_x96(0).unwrap();
+        let sqrt_target = tick_to_sqrt_price_x96(-100).unwrap();
+
+        let result = compute_swap_step(sqrt_current, sqrt_target, 0, 1000, true);
         assert!(result.is_err());
     }
 }
