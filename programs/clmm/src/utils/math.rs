@@ -185,27 +185,25 @@ pub fn get_amounts_for_liquidity(
     let amount_b: u64;
 
     if sqrt_price_x96_current <= sqrt_price_x96_lower {
-        // token A only : L * (sqrt_upper - sqrt_lower) * Q96 /sqrt_upper * sqrt_lower
-        let numerator = liquidity
-            .checked_mul(
-                sqrt_price_x96_upper
-                    .checked_sub(sqrt_price_x96_lower)
-                    .ok_or(ClmmError::ArithmeticOverflow)?,
-            )
+        // token A only: L * (sqrt_upper - sqrt_lower) / sqrt_lower * Q96 / sqrt_upper
+        let delta = sqrt_price_x96_upper
+            .checked_sub(sqrt_price_x96_lower)
+            .ok_or(ClmmError::ArithmeticOverflow)?;
+        // L * delta fits u128 for reasonable values; then divide by sqrt_lower first
+        let step1 = liquidity
+            .checked_mul(delta)
             .ok_or(ClmmError::ArithmeticOverflow)?
+            / sqrt_price_x96_lower;
+        // multiply by Q96, then divide by sqrt_upper
+        amount_a = (step1
             .checked_mul(Q96)
-            .ok_or(ClmmError::ArithmeticOverflow)?;
-
-        let denominator = sqrt_price_x96_upper
-            .checked_mul(sqrt_price_x96_lower)
-            .ok_or(ClmmError::ArithmeticOverflow)?;
-
-        amount_a = (numerator / denominator)
-            .try_into()
-            .map_err(|_| ClmmError::ArithmeticOverflow)?;
+            .ok_or(ClmmError::ArithmeticOverflow)?
+            / sqrt_price_x96_upper)
+        .try_into()
+        .map_err(|_| ClmmError::ArithmeticOverflow)?;
         amount_b = 0;
     } else if sqrt_price_x96_current >= sqrt_price_x96_upper {
-        // token B only : L * (sqrt_upper - sqrt_lower) / Q96
+        // token B only: L * (sqrt_upper - sqrt_lower) / Q96
         amount_a = 0;
         amount_b = (liquidity
             .checked_mul(
@@ -219,26 +217,22 @@ pub fn get_amounts_for_liquidity(
         .try_into()
         .map_err(|_| ClmmError::ArithmeticOverflow)?;
     } else {
-        //both tokens
-        // token A : L * (sqrt_upper - sqrt_current) * Q96 /sqrt_upper * sqrt_current
-        let numerator = liquidity
-            .checked_mul(
-                sqrt_price_x96_upper
-                    .checked_sub(sqrt_price_x96_current)
-                    .ok_or(ClmmError::ArithmeticOverflow)?,
-            )
+        // both tokens
+        // token A: L * (sqrt_upper - sqrt_current) / sqrt_current * Q96 / sqrt_upper
+        let delta = sqrt_price_x96_upper
+            .checked_sub(sqrt_price_x96_current)
+            .ok_or(ClmmError::ArithmeticOverflow)?;
+        let step1 = liquidity
+            .checked_mul(delta)
             .ok_or(ClmmError::ArithmeticOverflow)?
+            / sqrt_price_x96_current;
+        amount_a = (step1
             .checked_mul(Q96)
-            .ok_or(ClmmError::ArithmeticOverflow)?;
-
-        let denominator = sqrt_price_x96_upper
-            .checked_mul(sqrt_price_x96_current)
-            .ok_or(ClmmError::ArithmeticOverflow)?;
-
-        amount_a = (numerator / denominator)
-            .try_into()
-            .map_err(|_| ClmmError::ArithmeticOverflow)?;
-        // amount_b = L * (current - lower) / Q64
+            .ok_or(ClmmError::ArithmeticOverflow)?
+            / sqrt_price_x96_upper)
+        .try_into()
+        .map_err(|_| ClmmError::ArithmeticOverflow)?;
+        // amount_b = L * (current - lower) / Q96
         amount_b = (liquidity
             .checked_mul(
                 sqrt_price_x96_current
