@@ -29,5 +29,9 @@ pub enum ClmmError {
     #[msg("Invalid Amount Entered")]
     InvalidAmount,
     #[msg("Invalid tick array account")]
-    InvalidTickArrayAccount
+    InvalidTickArrayAccount,
+    #[msg("No liquidity available for swap")]
+    InsufficientLiquidity,
+    #[msg("Output amount below minimum (slippage exceeded)")]
+    SlippageExceeded
 }
