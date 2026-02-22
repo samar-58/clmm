@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[derive(Accounts)]
-#[instruction(tick_array_lower_start_index: i32, tick_array_upper_start_index: i32)]
+#[instruction(liquidity_amount: u128, upper_tick: i32, lower_tick: i32, tick_array_lower_start_index: i32, tick_array_upper_start_index: i32)]
 pub struct DecreaseLiquidity<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
